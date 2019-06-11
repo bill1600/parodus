@@ -37,6 +37,16 @@
 /*----------------------------------------------------------------------------*/
 /*                            File Scoped Variables                           */
 /*----------------------------------------------------------------------------*/
+#define TEST_CURL_FAIL 1
+#ifdef TEST_CURL_FAIL
+#define TEST_TOKEN_SERVER_FILE "/tmp/test_token_server_url.txt";
+/* If this file is found, read the name of the token_server_url from it.
+   So, for testint, we can control whether the curl succeeds or fails.
+*/
+static char test_token_server[64] = {'0'};
+int read_token_server_from_file ();
+#endif
+
 void createCurlheader(char *mac_header, char *serial_header, char *uuid_header, char *transaction_uuid, struct curl_slist *list, struct curl_slist **header_list);
 /*----------------------------------------------------------------------------*/
 /*                             External Functions                             */
@@ -75,6 +85,11 @@ int requestNewAuthToken(char *newToken, size_t len, int r_count)
 
 		createCurlheader(mac_header, serial_header, uuid_header, transaction_uuid, list, &headers_list);
 
+#ifdef TEST_CURL_FAIL
+		if (read_token_server_from_file () == 0)
+		  curl_easy_setopt(curl, CURLOPT_URL, test_token_server);
+		else
+#endif
 		curl_easy_setopt(curl, CURLOPT_URL, get_parodus_cfg()->token_server_url);
 		curl_easy_setopt(curl, CURLOPT_TIMEOUT, CURL_TIMEOUT_SEC);
 
@@ -300,3 +315,40 @@ void createCurlheader(char *mac_header, char *serial_header, char *uuid_header, 
 	}
 	*header_list = list;
 }
+
+#ifdef TEST_CURL_FAIL
+static int open_input_file (const char *fname)
+{
+  int fd = open(fname, O_RDONLY);
+  if (fd<0)
+  {
+    ParodusError ("File %s open error\n", fname);
+  }
+  return fd;
+} 
+
+int read_token_server_from_file ()
+{
+  ssize_t nbytes;
+  char *lastpos;
+  const char *fname = TEST_TOKEN_SERVER_FILE;
+  int fd = open_input_file(fname);
+
+  if (fd < 0)
+    return fd;
+  nbytes = read(fd, test_token_server, sizeof(test_token_server));
+  if (nbytes < 0)
+  {
+    ParodusError ("Read file %s error\n", fname);
+    close(fd);
+    return -1;
+  }
+  close(fd);
+  ParodusInfo ("%d bytes read into %s\n", nbytes, fname);
+  lastpos = strchr (test_token_server, '\n');
+  if (NULL != lastpos)
+    *lastpos = '\0';
+  return 0;
+}
+#endif
+
